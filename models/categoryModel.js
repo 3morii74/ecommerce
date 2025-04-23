@@ -20,11 +20,15 @@ const categorySchema = new mongoose.Schema(
 );
 
 const setImageURL = (doc) => {
-  if (doc.image) {
+  console.log('setImageURL called for category doc:', doc._id, 'image:', doc.image);
+  const isUrl = (str) => /^https?:\/\//i.test(str);
+
+  if (doc.image && !isUrl(doc.image)) {
     const imageUrl = `${process.env.BASE_URL}/categories/${doc.image}`;
     doc.image = imageUrl;
   }
 };
+
 // findOne, findAll and update
 categorySchema.post('init', (doc) => {
   setImageURL(doc);
