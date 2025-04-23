@@ -6,13 +6,22 @@ const {
   clearCart,
   updateCartItemQuantity,
   applyCoupon,
-  mergeGuestCart,
 } = require('../services/cartService');
 const authService = require('../services/authService');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 
-// Public routes: No authentication required
+// Rate limiting for cart actions (100 requests per 15 minutes)
+const cartLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  message: 'Too many cart requests, please try again later.',
+});
+
+// Apply rate limiting and authentication to all routes
+router.use(cartLimiter, authService.protect, authService.allowedTo('user'));
+
 router
   .route('/')
   .post(addProductToCart)
@@ -25,13 +34,5 @@ router
   .route('/:itemId')
   .put(updateCartItemQuantity)
   .delete(removeSpecificCartItem);
-
-// Protected route: Requires authentication
-router.post(
-  '/mergeGuestCart',
-  authService.protect,
-  authService.allowedTo('user'),
-  mergeGuestCart
-);
 
 module.exports = router;

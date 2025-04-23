@@ -22,18 +22,19 @@ const cartSchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.ObjectId,
       ref: 'User',
-      required: false, // Optional for guest carts
-    },
-    clientIp: {
-      type: String,
-      required: false, // Only set for guest carts
+      required: true, // Required for all carts
     },
   },
   { timestamps: true }
 );
 
-// Add indexes for better query performance
-cartSchema.index({ user: 1 }, { sparse: true });
-cartSchema.index({ clientIp: 1 }, { sparse: true }); // Index for guest carts
+// Optional TTL index for abandoned carts (expire after 30 days)
+cartSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: 30 * 24 * 60 * 60 }
+);
+
+// Index for query performance
+cartSchema.index({ user: 1 });
 
 module.exports = mongoose.model('Cart', cartSchema);
