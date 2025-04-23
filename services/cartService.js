@@ -140,7 +140,7 @@ exports.updateCartItemQuantity = asyncHandler(async (req, res, next) => {
     return next(new ApiError('Quantity must be a positive integer', 400));
   }
 
-  let cart = await Cart.findOne({ user: userId });
+  const cart = await Cart.findOne({ user: userId });
   if (!cart) {
     return next(new ApiError('Cart not found', 404));
   }
@@ -184,16 +184,14 @@ exports.applyCoupon = asyncHandler(async (req, res, next) => {
 
   const userId = req.user._id;
 
-  let cart = await Cart.findOne({ user: userId });
+  const cart = await Cart.findOne({ user: userId });
   if (!cart) {
     return next(new ApiError('Cart not found', 404));
   }
 
   const totalPrice = cart.totalCartPrice;
-  const totalPriceAfterDiscount = (
-    totalPrice -
-    (totalPrice * coupon.discount) / 100
-  ).toFixed(2);
+  const totalPriceAfterDiscount = totalPrice - coupon.discount;
+
 
   cart.totalPriceAfterDiscount = totalPriceAfterDiscount;
   await cart.save();
