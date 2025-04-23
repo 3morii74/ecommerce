@@ -1,5 +1,8 @@
+const asyncHandler = require('express-async-handler');
+
 const factory = require('./handlersFactory');
 const Coupon = require('../models/couponModel');
+const ApiError = require('../utils/apiError');
 
 // @desc    Get list of coupons
 // @route   GET /api/v1/coupons
@@ -25,3 +28,20 @@ exports.updateCoupon = factory.updateOne(Coupon);
 // @route   DELETE /api/v1/coupons/:id
 // @access  Private/Admin-Manager
 exports.deleteCoupon = factory.deleteOne(Coupon);
+
+exports.applyCoupon = asyncHandler(async (req, res, next) => {
+    const coupon = await Coupon.findOne({
+        name: req.body.coupon,
+        expire: { $gt: Date.now() },
+    });
+
+    if (!coupon) {
+        return next(new ApiError('Coupon is invalid or expired', 400));
+    }
+    const discount = coupon.discount;
+
+    res.status(200).json({
+        status: 'success',
+        discount: discount
+    });
+});

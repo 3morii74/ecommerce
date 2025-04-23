@@ -1,4 +1,6 @@
 const express = require('express');
+
+const rateLimit = require('express-rate-limit');
 const {
   addProductToCart,
   getLoggedUserCart,
@@ -8,7 +10,6 @@ const {
   applyCoupon,
 } = require('../services/cartService');
 const authService = require('../services/authService');
-const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ router
   .get(getLoggedUserCart)
   .delete(clearCart);
 
-router.put('/applyCoupon', applyCoupon);
+// router.put('/applyCoupon', applyCoupon);
 
 router
   .route('/:itemId')
