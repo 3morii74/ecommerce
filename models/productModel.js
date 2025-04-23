@@ -77,7 +77,6 @@ const productSchema = new mongoose.Schema(
       },
     ],
   },
-
   {
     timestamps: true,
     toJSON: { virtuals: true },
@@ -96,7 +95,7 @@ productSchema.virtual('reviews', {
 productSchema.pre(/^find/, function (next) {
   this.populate({
     path: 'category',
-    select: 'name -_id',
+    select: 'name _id', // Include _id and name
   });
   next();
 });
