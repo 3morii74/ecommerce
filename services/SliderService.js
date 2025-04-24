@@ -15,7 +15,7 @@ exports.resizeImage = asyncHandler(async (req, res, next) => {
 
     if (req.file) {
         await sharp(req.file.buffer)
-            .resize(1178, 441)
+            .resize(1440, 540)
             .toFormat('jpeg')
             .jpeg({ quality: 95 })
             .toFile(`uploads/sliders/${filename}`);
