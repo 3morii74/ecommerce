@@ -42,25 +42,17 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   // Process products concurrently with Promise.all and map
   const productValidations = await Promise.all(
     products.map(async (productInput, index) => {
-      const { _id, name: inputName, quantity = 1, color } = productInput;
-      if (!_id || !inputName) {
-        throw new ApiError(`Product at index ${index} must have an _id and name`, 400);
+      const { id, quantity = 1, color } = productInput;
+      if (!id) {
+        throw new ApiError(`Product at index ${index} must have an id `, 400);
       }
-
       // Fetch product from database
-      const product = await Product.findById(_id).select('title price quantity');
+      const product = await Product.findById(id).select('title price quantity');
       if (!product) {
-        throw new ApiError(`No product found with id ${_id} at index ${index}`, 404);
+        throw new ApiError(`No product found with id ${id} at index ${index}`, 404);
       }
-      if (product.title !== inputName) {
-        throw new ApiError(`Product name mismatch for id ${_id} at index ${index}`, 400);
-      }
-      if (product.quantity < quantity) {
-        throw new ApiError(`Insufficient stock for product ${inputName} at index ${index}`, 400);
-      }
-
       return {
-        product: _id,
+        product: id,
         quantity,
         color: color || 'N/A',
         price: product.price,
