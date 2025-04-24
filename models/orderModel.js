@@ -14,29 +14,34 @@ const orderSchema = new mongoose.Schema(
           ref: 'Product',
         },
         quantity: Number,
-        color: String,
         price: Number,
       },
     ],
-    taxPrice: {
-      type: Number,
-      default: 0,
-    },
+
     shippingAddress: {
       type: {
-        details: String,
-        phone: String,
-        city: String,
-        email: String // Add email field for guest users (optional)
+        details: { type: String, required: true },
+        apartment: { type: String, required: false },
+        floor: { type: String, required: false },
+        street: { type: String, required: false },
+        city: { type: String, required: true },
+        phone: { type: String, required: true },
+        name: { type: String, required: true },
+        email: { type: String, required: false },
       },
       required: true,
     },
-    shippingPrice: {
+
+    totalBeforeDiscount: {
       type: Number,
-      default: 0,
     },
-    totalOrderPrice: {
+    totalAfterDiscount: {
       type: Number,
+    },
+    coupon: {
+      type: mongoose.Schema.ObjectId,
+      ref: 'Coupon',
+      required: false,
     },
     paymentMethodType: {
       type: String,
@@ -57,18 +62,21 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Pre-hook to populate user and product fields
+// Pre-hook to populate user, product, and coupon fields
 orderSchema.pre(/^find/, function (next) {
-  // Populate user only if the user field exists (not null)
   this.populate({
     path: 'user',
     select: 'name profileImg email phone',
-    // Add a condition to skip population if user is null
     match: { _id: { $ne: null } },
-  }).populate({
-    path: 'cartItems.product',
-    select: 'title imageCover',
-  });
+  })
+    .populate({
+      path: 'cartItems.product',
+      select: 'title imageCover',
+    })
+    .populate({
+      path: 'coupon',
+      select: 'code discount',
+    });
 
   next();
 });

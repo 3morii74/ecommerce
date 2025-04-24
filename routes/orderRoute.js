@@ -12,8 +12,9 @@ const authService = require('../services/authService');
 
 const router = express.Router();
 
-// Public route: Allow unauthenticated users to create a cash order
-router.route('/:cartId').post(createCashOrder);
+// Allow authenticated and unauthenticated users (public route)
+router.route('/').post(createCashOrder);
+
 
 // Protected routes: Require authentication
 router.get(
@@ -27,7 +28,7 @@ router.get(
   '/',
   authService.protect,
   authService.allowedTo('user', 'admin', 'manager'),
-  filterOrderForLoggedUser,
+  //filterOrderForLoggedUser,
   findAllOrders
 );
 
