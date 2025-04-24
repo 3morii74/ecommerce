@@ -71,7 +71,7 @@ exports.getProduct = async (req, res, next) => {
   try {
     const productId = req.params.id;
     const clientIp = requestIp.getClientIp(req); // Extract client's IP address
-
+    console.log(clientIp);
     // Find the product
     const product = await Product.findById(productId);
 

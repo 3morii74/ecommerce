@@ -66,16 +66,10 @@ const productSchema = new mongoose.Schema(
     },
     viewedBy: [
       {
-        ipAddress: {
-          type: String,
-          required: true,
-        },
-        timestamp: {
-          type: Date,
-          default: Date.now,
-        },
-      },
-    ],
+        ipAddress: { type: String, required: true },
+        timestamp: { type: Date, default: Date.now }
+      }
+    ]
   },
   {
     timestamps: true,
@@ -84,7 +78,7 @@ const productSchema = new mongoose.Schema(
   }
 );
 productSchema.index({ views: -1 });
-
+//productSchema.index({ 'viewedBy.timestamp': 1 }); // Index for efficient sorting/grouping
 productSchema.virtual('reviews', {
   ref: 'Review',
   foreignField: 'product',

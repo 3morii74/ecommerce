@@ -1,4 +1,8 @@
 const express = require('express');
+const mongoose = require('mongoose');
+
+const asyncHandler = require('express-async-handler');
+
 const Product = require('../models/productModel'); const {
   getProductValidator,
   createProductValidator,
@@ -37,20 +41,87 @@ router
     createProductValidator,
     createProduct
   );
-// New route to get views for a specific product
-router.get('/:id/views', authService.protect // Ensure user is authenticated
-  , authService.allowedTo('admin') // Restrict to admins
-  , async (req, res) => {
-    try {
-      const product = await Product.findById(req.params.id).select('views');
-      if (!product) {
-        return res.status(404).json({ status: 'error', message: 'Product not found' });
-      }
-      res.status(200).json({ status: 'success', views: product.views });
-    } catch (error) {
-      res.status(500).json({ status: 'error', message: 'Error fetching views', error: error.message });
+// New route to get daily views for a specific product
+router.get(
+  '/:id/views',
+  authService.protect, // Ensure user is authenticated
+  authService.allowedTo('admin'), // Restrict to admins
+  asyncHandler(async (req, res) => {
+    const productId = req.params.id;
+
+    // Validate product ID
+    if (!productId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid product ID' });
     }
-  });
+
+    // Optional date range query parameters
+    const startDate = req.query.startDate
+      ? new Date(req.query.startDate)
+      : new Date('1970-01-01'); // Default to epoch start
+    const endDate = req.query.endDate
+      ? new Date(req.query.endDate)
+      : new Date(); // Default to today
+
+    // Validate dates
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return res.status(400).json({ status: 'error', message: 'Invalid date format' });
+    }
+    if (startDate > endDate) {
+      return res.status(400).json({ status: 'error', message: 'startDate cannot be after endDate' });
+    }
+
+    // Set endDate to end of day
+    endDate.setHours(23, 59, 59, 999);
+
+    // Aggregate views by day
+    const dailyViews = await Product.aggregate([
+      // Match the product
+      { $match: { _id: new mongoose.Types.ObjectId(productId) } },
+      // Unwind viewedBy array
+      { $unwind: '$viewedBy' },
+      // Filter by date range
+      {
+        $match: {
+          'viewedBy.timestamp': {
+            $gte: startDate,
+            $lte: endDate,
+          },
+        },
+      },
+      // Group by day
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$viewedBy.timestamp' },
+          },
+          uniqueIPs: { $addToSet: '$viewedBy.ipAddress' }, // Collect unique IPs per day
+        },
+      },
+      // Calculate views (count of unique IPs)
+      {
+        $project: {
+          date: '$_id',
+          views: { $size: '$uniqueIPs' },
+          _id: 0,
+        },
+      },
+      // Sort by date descending
+      { $sort: { date: -1 } },
+    ]);
+
+    // Check if product exists
+    const productExists = await Product.exists({ _id: productId });
+    if (!productExists) {
+      return res.status(404).json({ status: 'error', message: 'Product not found' });
+    }
+
+    // If no views in the date range, return empty array
+    res.status(200).json({
+      status: 'success',
+      data: dailyViews,
+    });
+  })
+);
 
 // New route to get total views for all products
 router.get('/views', authService.protect, authService.allowedTo('admin'), async (req, res) => {
