@@ -15,9 +15,7 @@ const sendEmail = require('../utils/sendEmail');
 // @route   POST /api/v1/orders
 // @access  Public
 exports.createCashOrder = asyncHandler(async (req, res, next) => {
-  // App settings
-  const taxPrice = 0;
-  const shippingPrice = 0;
+
 
   // Log the incoming request for debugging
   console.log('Request body:', req.body);
@@ -37,6 +35,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
 
   // 2) Validate products and calculate subtotal
   const cartItems = [];
+  const productDetails = []; // Store product details for email
   let subtotal = 0;
 
   // Process products concurrently with Promise.all and map
@@ -44,15 +43,21 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
     products.map(async (productInput, index) => {
       const { id, quantity = 1, color } = productInput;
       if (!id) {
-        throw new ApiError(`Product at index ${index} must have an id `, 400);
+        throw new ApiError(`Product at index ${index} must have an _id`, 400);
       }
+
       // Fetch product from database
       const product = await Product.findById(id).select('title price quantity');
       if (!product) {
         throw new ApiError(`No product found with id ${id} at index ${index}`, 404);
       }
+      if (product.quantity < quantity) {
+        throw new ApiError(`Insufficient stock for product ${product.title} at index ${index}`, 400);
+      }
+
       return {
         product: id,
+        title: product.title, // Store title for cartItems and email
         quantity,
         color: color || 'N/A',
         price: product.price,
@@ -68,12 +73,21 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
       quantity: item.quantity,
       color: item.color,
       price: item.price,
+      name: item.title, // Add name for cartItems
+    });
+    productDetails.push({
+      title: item.title,
+      quantity: item.quantity,
+      price: item.price,
     });
     subtotal += item.total;
   });
 
+  // Debug: Log cartItems before saving
+  console.log('cartItems before Order.create:', cartItems);
+
   // Calculate total before discount
-  const totalBeforeDiscount = subtotal + taxPrice + shippingPrice;
+  const totalBeforeDiscount = subtotal;
 
   // 3) Validate and apply coupon (if provided)
   let totalAfterDiscount = totalBeforeDiscount;
@@ -113,13 +127,14 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
     user: userId,
     cartItems,
     shippingAddress: { details, city, phone, name, apartment, floor, street, email },
-    taxPrice,
-    shippingPrice,
     totalBeforeDiscount,
     totalAfterDiscount,
     coupon: couponId,
     paymentMethodType: 'cash',
   });
+
+  // Debug: Log order after creation
+  console.log('Order after creation:', order);
 
   // 5) Update product quantity and sold count
   if (order) {
@@ -140,24 +155,21 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   }
 
   // 6) Send confirmation emails
-  const orderItemsTableRows = cartItems
-    .map((item, index) => {
-      const productName = products[index].name; // Use input name (already validated)
-      return `
-        <tr>
-          <td style="padding: 10px; border: 1px solid #ddd;">${productName}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${item.quantity}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">$${item.price}</td>
-        </tr>
-      `;
-    })
+  const orderItemsTableRows = productDetails
+    .map((item) => `
+      <tr>
+        <td style="padding: 10px; border: 1px solid #ddd;">${item.title}</td>
+        <td style="padding: 10px; border: 1px solid #ddd;">${item.quantity}</td>
+        <td style="padding: 10px; border: 1px solid #ddd;">$${item.price}</td>
+      </tr>
+    `)
     .join('');
 
   // Customer email (only if email is provided)
   if (email) {
     const customerMessage = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; background-color: #f9f9f9;">
-        <img src="https://omarahmedd.com/assets/icons/omer.png" alt="E-shop Logo" style="max-width: 150px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
+        <img src="https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/15ad48536f43ae127e96052f66c9998b~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=14579&refresh_token=429e3bbc&x-expires=1745686800&x-signature=e1V4wZQdr0DWdp51po7D6wXvMqM%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=my" alt="E-shop Logo" style="max-width: 150px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
         <h2 style="color: #333; text-align: center;">Thank You for Your Order!</h2>
         <p style="color: #555;">Hi ${name},</p>
         <p style="color: #555;">Thank you for shopping with E-shop! Here are your order details:</p>
@@ -186,7 +198,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
           Phone: ${phone}</p>
         <p style="color: #555;">We will notify you once your order is shipped.</p>
         <p style="color: #777; text-align: center;">
-          The E-shop Team<br>
+          Dodos Team<br>
           <a href="https://omarahmedd.com" style="color: #1a73e8; text-decoration: none;">Visit our website</a>
         </p>
       </div>
@@ -204,7 +216,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   if (adminEmail) {
     const adminMessage = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; background-color: #f9f9f9;">
-        <img src="https://omarahmedd.com/assets/icons/omer.png" alt="E-shop Logo" style="max-width: 150px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
+        <img src="https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/15ad48536f43ae127e96052f66c9998b~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=14579&refresh_token=429e3bbc&x-expires=1745686800&x-signature=e1V4wZQdr0DWdp51po7D6wXvMqM%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=my" alt="E-shop Logo" style="max-width: 150px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
         <h2 style="color: #333; text-align: center;">New Cash Order Notification</h2>
         <p style="color: #555;">Hello Admin,</p>
         <p style="color: #555;">A new cash order has been placed on E-shop.</p>
@@ -234,7 +246,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
           ${details}, ${city}${apartment ? `, ${apartment}` : ''}${floor ? `, ${floor}` : ''}${street ? `, ${street}` : ''}<br>
           Phone: ${phone}</p>
         <p style="color: #555;">Please review the order in the admin panel.</p>
-        <p style="color: #777; text-align: center;">The E-shop Team</p>
+        <p style="color: #777; text-align: center;">Dodos Team</p>
       </div>
     `;
     await sendEmail({
@@ -256,6 +268,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
     },
   });
 });
+
 
 // @desc    Get orders for authenticated user or all orders for admin
 // @route   GET /api/v1/orders

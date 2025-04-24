@@ -3,7 +3,7 @@ const {
   createCashOrder,
   findAllOrders,
   findSpecificOrder,
-  filterOrderForLoggedUser,
+ // filterOrderForLoggedUser,
   updateOrderToPaid,
   updateOrderToDelivered,
   checkoutSession,

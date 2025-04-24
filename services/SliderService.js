@@ -15,7 +15,9 @@ exports.resizeImage = asyncHandler(async (req, res, next) => {
 
     if (req.file) {
         await sharp(req.file.buffer)
-            .resize(1440, 540)
+            .resize(1440, 540, {
+                fit: 'fill', // Stretch the image to fill the dimensions, ignoring aspect ratio
+            })
             .toFormat('jpeg')
             .jpeg({ quality: 95 })
             .toFile(`uploads/sliders/${filename}`);
