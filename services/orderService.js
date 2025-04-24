@@ -183,8 +183,6 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
           </tbody>
         </table>
         <p style="color: #555;"><strong>Subtotal:</strong> $${subtotal.toFixed(2)}</p>
-        <p style="color: #555;"><strong>Tax:</strong> $${taxPrice.toFixed(2)}</p>
-        <p style="color: #555;"><strong>Shipping:</strong> $${shippingPrice.toFixed(2)}</p>
         ${couponName
         ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -$${discountAmount.toFixed(2)}</p>`
         : ''
@@ -234,8 +232,6 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
           </tbody>
         </table>
         <p style="color: #555;"><strong>Subtotal:</strong> $${subtotal.toFixed(2)}</p>
-        <p style="color: #555;"><strong>Tax:</strong> $${taxPrice.toFixed(2)}</p>
-        <p style="color: #555;"><strong>Shipping:</strong> $${shippingPrice.toFixed(2)}</p>
         ${couponName
         ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -$${discountAmount.toFixed(2)}</p>`
         : ''

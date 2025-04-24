@@ -26,7 +26,7 @@ exports.resizeProductImages = asyncHandler(async (req, res, next) => {
       const imageCoverFileName = `product-${uuidv4()}-${Date.now()}-cover.jpeg`;
 
       await sharp(req.files.imageCover[0].buffer)
-        .resize(2000, 1333)
+        .resize(442, 422)
         .toFormat('jpeg')
         .jpeg({ quality: 95 })
         .toFile(`uploads/products/${imageCoverFileName}`);
