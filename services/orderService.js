@@ -51,14 +51,11 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
       if (!product) {
         throw new ApiError(`No product found with id ${id} at index ${index}`, 404);
       }
-      if (product.quantity < quantity) {
-        throw new ApiError(`Insufficient stock for product ${product.title} at index ${index}`, 400);
-      }
+
 
       return {
         product: id,
         title: product.title, // Store title for cartItems and email
-        quantity,
         color: color || 'N/A',
         price: product.price,
         total: product.price * quantity,
@@ -70,14 +67,12 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   productValidations.forEach((item) => {
     cartItems.push({
       product: item.product,
-      quantity: item.quantity,
       color: item.color,
       price: item.price,
       name: item.title, // Add name for cartItems
     });
     productDetails.push({
       title: item.title,
-      quantity: item.quantity,
       price: item.price,
     });
     subtotal += item.total;
@@ -105,7 +100,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
     if (!couponDoc.expire) {
       return next(new ApiError(`Coupon ${coupon} has no expiration date`, 400));
     }
-    if (isNaN(new Date(couponDoc.expire).getTime())) {
+    if (Number.isNaN(new Date(couponDoc.expire).getTime())) {
       return next(new ApiError(`Coupon ${coupon} has an invalid expiration date`, 400));
     }
     if (couponDoc.expire < new Date()) {
@@ -136,12 +131,12 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   // Debug: Log order after creation
   console.log('Order after creation:', order);
 
-  // 5) Update product quantity and sold count
+  // 5) Update product sold count
   if (order) {
     const bulkOption = cartItems.map((item) => ({
       updateOne: {
         filter: { _id: item.product },
-        update: { $inc: { quantity: -item.quantity, sold: +item.quantity } },
+        update: { $inc: { sold: +item.quantity } },
       },
     }));
     await Product.bulkWrite(bulkOption, {});
@@ -160,7 +155,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
       <tr>
         <td style="padding: 10px; border: 1px solid #ddd;">${item.title}</td>
         <td style="padding: 10px; border: 1px solid #ddd;">${item.quantity}</td>
-        <td style="padding: 10px; border: 1px solid #ddd;">$${item.price}</td>
+        <td style="padding: 10px; border: 1px solid #ddd;">${item.price} LE</td>
       </tr>
     `)
     .join('');
@@ -186,13 +181,13 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
             ${orderItemsTableRows}
           </tbody>
         </table>
-        <p style="color: #555;"><strong>Subtotal:</strong> $${subtotal.toFixed(2)}</p>
+        <p style="color: #555;"><strong>Subtotal:</strong> ${subtotal.toFixed(2)} LE</p>
         ${couponName
         ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -$${discountAmount.toFixed(2)}</p>`
         : ''
       }
-        <p style="color: #555;"><strong>Total Before Discount:</strong> $${totalBeforeDiscount.toFixed(2)}</p>
-        <p style="color: #555;"><strong>Total After Discount:</strong> $${totalAfterDiscount.toFixed(2)}</p>
+        <p style="color: #555;"><strong>Total Before Discount:</strong> ${totalBeforeDiscount.toFixed(2)} LE</p>
+        <p style="color: #555;"><strong>Total After Discount:</strong> ${totalAfterDiscount.toFixed(2)} LE</p>
         <p style="color: #555;"><strong>Shipping Address:</strong><br>
           ${details}, ${city}${apartment ? `, ${apartment}` : ''}${floor ? `, ${floor}` : ''}${street ? `, ${street}` : ''}<br>
           Phone: ${phone}</p>
@@ -235,13 +230,13 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
             ${orderItemsTableRows}
           </tbody>
         </table>
-        <p style="color: #555;"><strong>Subtotal:</strong> $${subtotal.toFixed(2)}</p>
+        <p style="color: #555;"><strong>Subtotal:</strong> ${subtotal.toFixed(2)} LE</p>
         ${couponName
         ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -$${discountAmount.toFixed(2)}</p>`
         : ''
       }
-        <p style="color: #555;"><strong>Total Before Discount:</strong> $${totalBeforeDiscount.toFixed(2)}</p>
-        <p style="color: #555;"><strong>Total After Discount:</strong> $${totalAfterDiscount.toFixed(2)}</p>
+        <p style="color: #555;"><strong>Total Before Discount:</strong> ${totalBeforeDiscount.toFixed(2)} LE</p>
+        <p style="color: #555;"><strong>Total After Discount:</strong> ${totalAfterDiscount.toFixed(2)} LE</p>
         <p style="color: #555;"><strong>Shipping Address:</strong><br>
           ${details}, ${city}${apartment ? `, ${apartment}` : ''}${floor ? `, ${floor}` : ''}${street ? `, ${street}` : ''}<br>
           Phone: ${phone}</p>

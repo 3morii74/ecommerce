@@ -63,7 +63,7 @@ router.get(
       : new Date(); // Default to today
 
     // Validate dates
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
       return res.status(400).json({ status: 'error', message: 'Invalid date format' });
     }
     if (startDate > endDate) {
