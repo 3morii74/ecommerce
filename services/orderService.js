@@ -43,18 +43,25 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
         throw new ApiError(`Product at index ${index} must have an _id`, 400);
       }
 
+      // Validate quantity
+      const parsedQuantity = Number(quantity);
+      if (Number.isNaN(parsedQuantity) || parsedQuantity <= 0) {
+        throw new ApiError(`Invalid quantity for product at index ${index}: ${quantity}`, 400);
+      }
+
       // Fetch product from database
-      const product = await Product.findById(id).select('title price quantity');
+      const product = await Product.findById(id).select('title price');
       if (!product) {
         throw new ApiError(`No product found with id ${id} at index ${index}`, 404);
       }
 
       return {
         product: id,
-        title: product.title, // Store title for cartItems and email
+        title: product.title,
         color: color || 'N/A',
         price: product.price,
-        total: product.price * quantity,
+        quantity: parsedQuantity, // Store the validated quantity
+        total: product.price * parsedQuantity,
       };
     })
   );
@@ -65,11 +72,13 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
       product: item.product,
       color: item.color,
       price: item.price,
-      name: item.title, // Add name for cartItems
+      name: item.title,
+      quantity: item.quantity, // Include quantity in cartItems
     });
     productDetails.push({
       title: item.title,
       price: item.price,
+      quantity: item.quantity, // Include quantity for email
     });
     subtotal += item.total;
   });
@@ -129,12 +138,19 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
 
   // 5) Update product sold count
   if (order) {
-    const bulkOption = cartItems.map((item) => ({
-      updateOne: {
-        filter: { _id: item.product },
-        update: { $inc: { sold: +item.quantity } },
-      },
-    }));
+    const bulkOption = cartItems.map((item) => {
+      // Double-check quantity before bulkWrite
+      const quantityToIncrement = Number(item.quantity);
+      if (Number.isNaN(quantityToIncrement) || quantityToIncrement <= 0) {
+        throw new ApiError(`Invalid quantity for product ${item.product}: ${item.quantity}`, 400);
+      }
+      return {
+        updateOne: {
+          filter: { _id: item.product },
+          update: { $inc: { sold: quantityToIncrement } },
+        },
+      };
+    });
     await Product.bulkWrite(bulkOption, {});
 
     // Update ProductOrder counts for each product
@@ -290,6 +306,37 @@ exports.getOrder = asyncHandler(async (req, res, next) => {
   });
 });
 
+
+// @desc    Get orders for authenticated user or all orders for admin
+// @route   GET /api/v1/orders
+// @access  Protected (user, admin)
+exports.getOrder = asyncHandler(async (req, res, next) => {
+  // Check user role
+  const query = req.user.role === 'admin' ? {} : { user: req.user._id };
+
+  // Find orders with populated user and product details
+  const orders = await Order.find(query)
+    .populate({
+      path: 'user',
+      select: 'name email phone',
+      match: { _id: { $ne: null } },
+    })
+    .populate({
+      path: 'cartItems.product',
+      select: 'title imageCover',
+    });
+
+  if (!orders || orders.length === 0) {
+    return next(new ApiError('No orders found', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    results: orders.length,
+    data: orders,
+  });
+});
+
 // @desc    Get all orders
 // @route   GET /api/v1/orders
 // @access  Protected/User-Admin-Manager
@@ -301,7 +348,7 @@ exports.findAllOrders = factory.getAll(Order);
 exports.findSpecificOrder = asyncHandler(async (req, res, next) => {
   // Allow admins to include soft-deleted orders via query parameter
   const includeDeleted = req.user.role === 'admin' && req.query.includeDeleted === 'true';
-  
+
   const order = await Order.findById(req.params.id)
     .setOptions({ includeDeleted }) // Pass includeDeleted to the query
     .populate({
