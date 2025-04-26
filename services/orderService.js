@@ -2,9 +2,8 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET);
 const asyncHandler = require('express-async-handler');
 const factory = require('./handlersFactory');
 const ApiError = require('../utils/apiError');
-const productOrderService = require('./productOrderService'); // Import the service
+const productOrderService = require('./productOrderService');
 const Coupon = require('../models/couponModel');
-
 const User = require('../models/userModel');
 const Product = require('../models/productModel');
 const Cart = require('../models/cartModel');
@@ -15,8 +14,6 @@ const sendEmail = require('../utils/sendEmail');
 // @route   POST /api/v1/orders
 // @access  Public
 exports.createCashOrder = asyncHandler(async (req, res, next) => {
-
-
   // Log the incoming request for debugging
   console.log('Request body:', req.body);
 
@@ -51,7 +48,6 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
       if (!product) {
         throw new ApiError(`No product found with id ${id} at index ${index}`, 404);
       }
-
 
       return {
         product: id,
@@ -264,7 +260,6 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   });
 });
 
-
 // @desc    Get orders for authenticated user or all orders for admin
 // @route   GET /api/v1/orders
 // @access  Protected (user, admin)
@@ -294,6 +289,7 @@ exports.getOrder = asyncHandler(async (req, res, next) => {
     data: orders,
   });
 });
+
 // @desc    Get all orders
 // @route   GET /api/v1/orders
 // @access  Protected/User-Admin-Manager
@@ -302,7 +298,72 @@ exports.findAllOrders = factory.getAll(Order);
 // @desc    Get specific order
 // @route   GET /api/v1/orders/:id
 // @access  Protected/User-Admin-Manager
-exports.findSpecificOrder = factory.getOne(Order);
+exports.findSpecificOrder = asyncHandler(async (req, res, next) => {
+  // Allow admins to include soft-deleted orders via query parameter
+  const includeDeleted = req.user.role === 'admin' && req.query.includeDeleted === 'true';
+  
+  const order = await Order.findById(req.params.id)
+    .setOptions({ includeDeleted }) // Pass includeDeleted to the query
+    .populate({
+      path: 'user',
+      select: 'name email phone',
+      match: { _id: { $ne: null } },
+    })
+    .populate({
+      path: 'cartItems.product',
+      select: 'title imageCover',
+    });
+
+  if (!order) {
+    return next(
+      new ApiError(`No order found for this id: ${req.params.id}`, 404)
+    );
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: order,
+  });
+});
+
+// @desc    Get all soft-deleted orders
+// @route   GET /api/v1/orders/deleted
+// @access  Protected/Admin
+exports.findDeletedOrders = asyncHandler(async (req, res, next) => {
+  // Explicitly query for deleted orders
+  const query = Order.find({ deleted: true }).setOptions({ includeDeleted: true });
+
+  const orders = await query
+    .populate({
+      path: 'user',
+      select: 'name email phone',
+      match: { _id: { $ne: null } },
+    })
+    .populate({
+      path: 'cartItems.product',
+      select: 'title imageCover',
+    });
+
+  // Debug: Log the orders to verify the deleted field
+  console.log('Fetched deleted orders:', orders.map(order => ({
+    _id: order._id,
+    deleted: order.deleted,
+    deletedAt: order.deletedAt,
+  })));
+
+  // Filter out any non-deleted orders (just in case)
+  const deletedOrders = orders.filter(order => order.deleted === true);
+
+  if (!deletedOrders || deletedOrders.length === 0) {
+    return next(new ApiError('No deleted orders found', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    results: deletedOrders.length,
+    data: deletedOrders,
+  });
+});
 
 // @desc    Update order paid status to paid
 // @route   PUT /api/v1/orders/:id/pay
@@ -348,6 +409,33 @@ exports.updateOrderToDelivered = asyncHandler(async (req, res, next) => {
   const updatedOrder = await order.save();
 
   res.status(200).json({ status: 'success', data: updatedOrder });
+});
+
+// @desc    Soft delete an order
+// @route   DELETE /api/v1/orders/:id/soft-delete
+// @access  Protected/Admin
+exports.softDeleteOrder = asyncHandler(async (req, res, next) => {
+  const order = await Order.findById(req.params.id);
+  if (!order) {
+    return next(
+      new ApiError(
+        `There is no such order with this id: ${req.params.id}`,
+        404
+      )
+    );
+  }
+
+  // Mark order as deleted
+  order.deleted = true;
+  order.deletedAt = Date.now();
+
+  const updatedOrder = await order.save();
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Order has been soft deleted',
+    data: updatedOrder,
+  });
 });
 
 // @desc    Get checkout session from Stripe and send it as response

@@ -17,7 +17,6 @@ const orderSchema = new mongoose.Schema(
         price: Number,
       },
     ],
-
     shippingAddress: {
       type: {
         details: { type: String, required: true },
@@ -31,7 +30,6 @@ const orderSchema = new mongoose.Schema(
       },
       required: true,
     },
-
     totalBeforeDiscount: {
       type: Number,
     },
@@ -58,12 +56,29 @@ const orderSchema = new mongoose.Schema(
       default: false,
     },
     deliveredAt: Date,
+    deleted: {
+      type: Boolean,
+      default: false, // Add deleted field for soft deletion
+    },
+    deletedAt: Date, // Optional: Track when the order was soft-deleted
   },
   { timestamps: true }
 );
 
-// Pre-hook to populate user, product, and coupon fields
+// Pre-hook to exclude soft-deleted orders by default
 orderSchema.pre(/^find/, function (next) {
+  // Debug: Log the query and options
+  console.log('Pre-find hook - Query:', this.getQuery());
+  console.log('Pre-find hook - IncludeDeleted:', this.getQuery().includeDeleted);
+
+  // Only apply the filter if 'includeDeleted' is not explicitly set to true
+  if (!this.getQuery().includeDeleted) {
+    console.log('Applying default filter: excluding deleted orders');
+    this.where({ deleted: { $ne: true } });
+  } else {
+    console.log('Including deleted orders due to includeDeleted=true');
+  }
+
   this.populate({
     path: 'user',
     select: 'name profileImg email phone',

@@ -7,7 +7,6 @@ const categorySchema = new mongoose.Schema(
       required: [true, 'Category required'],
       unique: [true, 'Category must be unique'],
       minlength: [3, 'Too short category name'],
-      maxlength: [32, 'Too long category name'],
     },
     // A and B => shopping.com/a-and-b
     slug: {

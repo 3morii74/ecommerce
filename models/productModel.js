@@ -26,7 +26,6 @@ const productSchema = new mongoose.Schema(
       type: Number,
       required: [true, 'Product price is required'],
       trim: true,
-      max: [200000, 'Too long product price'],
     },
     priceAfterDiscount: {
       type: Number,
@@ -50,10 +49,6 @@ const productSchema = new mongoose.Schema(
       type: Number,
       min: [1, 'Rating must be above or equal 1.0'],
       max: [5, 'Rating must be below or equal 5.0'],
-    },
-    ratingsQuantity: {
-      type: Number,
-      default: 0,
     },
     views: {
       type: Number,

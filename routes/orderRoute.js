@@ -3,10 +3,11 @@ const {
   createCashOrder,
   findAllOrders,
   findSpecificOrder,
- // filterOrderForLoggedUser,
   updateOrderToPaid,
   updateOrderToDelivered,
   checkoutSession,
+  softDeleteOrder,
+  findDeletedOrders,
 } = require('../services/orderService');
 const authService = require('../services/authService');
 
@@ -14,7 +15,6 @@ const router = express.Router();
 
 // Allow authenticated and unauthenticated users (public route)
 router.route('/').post(createCashOrder);
-
 
 // Protected routes: Require authentication
 router.get(
@@ -28,10 +28,18 @@ router.get(
   '/',
   authService.protect,
   authService.allowedTo('user', 'admin', 'manager'),
-  //filterOrderForLoggedUser,
   findAllOrders
 );
 
+// Get all soft-deleted orders: Admin only (moved before /:id)
+router.get(
+  '/deleted',
+  authService.protect,
+  authService.allowedTo('admin'),
+  findDeletedOrders
+);
+
+// Get specific order: Must come after /deleted to avoid conflict
 router.get(
   '/:id',
   authService.protect,
@@ -51,6 +59,14 @@ router.put(
   authService.protect,
   authService.allowedTo('admin', 'manager'),
   updateOrderToDelivered
+);
+
+// Soft delete route: Admin only
+router.delete(
+  '/:id/soft-delete',
+  authService.protect,
+  authService.allowedTo('admin'),
+  softDeleteOrder
 );
 
 module.exports = router;
