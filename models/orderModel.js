@@ -14,14 +14,14 @@ const orderSchema = new mongoose.Schema(
   {
     orderId: {
       type: String,
-      unique: true, // Ensure orderId is unique
+      unique: true,
       required: [true, 'Order ID is required'],
-      index: true, // Add index for faster uniqueness checks
+      index: true,
     },
     user: {
       type: mongoose.Schema.ObjectId,
       ref: 'User',
-      required: false, // Make user optional for guest orders
+      required: false,
     },
     cartItems: [
       {
@@ -31,18 +31,16 @@ const orderSchema = new mongoose.Schema(
         },
         quantity: Number,
         price: Number,
-        name: String, // Added name field to match service
+        name: String,
       },
     ],
     shippingAddress: {
       type: {
-        details: { type: String, required: true },
-        apartment: { type: String, required: false },
-        floor: { type: String, required: false },
-        street: { type: String, required: false },
-        city: { type: String, required: true },
-        phone: { type: String, required: true },
-        name: { type: String, required: true },
+        alias: { type: String, required: [true, 'Alias is required'] },
+        details: { type: String, required: [true, 'Details is required'] },
+        phone: { type: String, required: [true, 'Phone is required'] },
+        city: { type: String, required: [true, 'City is required'] },
+        postalCode: { type: String, required: false },
         email: { type: String, required: false },
       },
       required: true,
@@ -75,11 +73,11 @@ const orderSchema = new mongoose.Schema(
     deliveredAt: Date,
     deleted: {
       type: Boolean,
-      default: false, // Add deleted field for soft deletion
+      default: false,
     },
-    deletedAt: Date, // Optional: Track when the order was soft-deleted
+    deletedAt: Date,
   },
-  { timestamps: true, id: false } // Disable default _id
+  { timestamps: true, id: false }
 );
 
 // Pre-validate hook to generate a unique orderId
@@ -94,7 +92,7 @@ orderSchema.pre('validate', async function (next) {
 
     try {
       while (!isUnique && retries < maxRetries) {
-        id = generateOrderId(); // Generate a 6-character ID
+        id = generateOrderId();
         console.log(`Attempt ${retries + 1}: Generated orderId: ${id}`);
         const existingOrder = await mongoose.models.Order.findOne({ orderId: id });
         if (!existingOrder) {
@@ -111,7 +109,7 @@ orderSchema.pre('validate', async function (next) {
         return next(new Error('Failed to generate a unique orderId after maximum retries'));
       }
 
-      this.orderId = id; // Assign the unique ID
+      this.orderId = id;
       console.log(`Assigned orderId: ${this.orderId}`);
     } catch (error) {
       console.error('Error in pre-validate hook:', error);

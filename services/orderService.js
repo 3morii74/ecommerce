@@ -15,7 +15,6 @@ const sendEmail = require('../utils/sendEmail');
 // @route   POST /api/v1/orders
 // @access  Public
 exports.createCashOrder = asyncHandler(async (req, res, next) => {
-  // Log the incoming request for debugging
   console.log('Request body:', req.body);
 
   // 1) Validate input
@@ -26,17 +25,16 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   if (!shippingAddress || typeof shippingAddress !== 'object') {
     return next(new ApiError('Shipping address is required', 400));
   }
-  const { details, city, phone, name, apartment, floor, street, email } = shippingAddress;
-  if (!details || !city || !phone || !name) {
-    return next(new ApiError('Shipping address must include details, city, phone, and name', 400));
+  const { alias, details, phone, city, postalCode, email } = shippingAddress;
+  if (!alias || !details || !phone || !city) {
+    return next(new ApiError('Shipping address must include alias, details, phone, and city', 400));
   }
 
   // 2) Validate products and calculate subtotal
   const cartItems = [];
-  const productDetails = []; // Store product details for email
+  const productDetails = [];
   let subtotal = 0;
 
-  // Process products concurrently with Promise.all and map
   const productValidations = await Promise.all(
     products.map(async (productInput, index) => {
       const { id, quantity = 1, color } = productInput;
@@ -44,13 +42,11 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
         throw new ApiError(`Product at index ${index} must have an _id`, 400);
       }
 
-      // Validate quantity
       const parsedQuantity = Number(quantity);
       if (Number.isNaN(parsedQuantity) || parsedQuantity <= 0) {
         throw new ApiError(`Invalid quantity for product at index ${index}: ${quantity}`, 400);
       }
 
-      // Fetch product from database
       const product = await Product.findById(id).select('title price');
       if (!product) {
         throw new ApiError(`No product found with id ${id} at index ${index}`, 404);
@@ -67,7 +63,6 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
     })
   );
 
-  // Aggregate product results
   productValidations.forEach((item) => {
     cartItems.push({
       product: item.product,
@@ -84,10 +79,8 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
     subtotal += item.total;
   });
 
-  // Debug: Log cartItems before saving
   console.log('cartItems before Order.create:', cartItems);
 
-  // Calculate total before discount
   const totalBeforeDiscount = subtotal;
 
   // 3) Validate and apply coupon (if provided)
@@ -95,7 +88,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   let couponId = null;
   let couponName = null;
   let discountAmount = 0;
-  let discountPercentage = 0; // Declare discountPercentage here
+  let discountPercentage = 0;
 
   if (coupon) {
     const couponDoc = await Coupon.findOne({ name: coupon });
@@ -103,7 +96,6 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
       return next(new ApiError(`Invalid coupon name: ${coupon}`, 400));
     }
 
-    // Check expiration
     if (!couponDoc.expire) {
       return next(new ApiError(`Coupon ${coupon} has no expiration date`, 400));
     }
@@ -114,25 +106,23 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
       return next(new ApiError(`Coupon ${coupon} has expired`, 400));
     }
 
-    // Apply percentage-based discount
-    discountPercentage = couponDoc.discount; // e.g., 10 for 10%
+    discountPercentage = couponDoc.discount;
     if (discountPercentage < 0 || discountPercentage > 100) {
       return next(new ApiError(`Invalid discount percentage: ${discountPercentage}`, 400));
     }
     discountAmount = (totalBeforeDiscount * discountPercentage) / 100;
     totalAfterDiscount = Math.max(0, totalBeforeDiscount - discountAmount);
 
-    // Store coupon details
     couponId = couponDoc._id;
     couponName = couponDoc.name;
   }
 
   // 4) Create order
-  const userId = req.user ? req.user._id : null; // Optional user ID for guests
+  const userId = req.user ? req.user._id : null;
   const orderData = {
     user: userId,
     cartItems,
-    shippingAddress: { details, city, phone, name, apartment, floor, street, email },
+    shippingAddress: { alias, details, phone, city, postalCode, email },
     totalBeforeDiscount,
     totalAfterDiscount,
     coupon: couponId,
@@ -143,10 +133,8 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
 
   const order = await Order.create(orderData);
 
-  // Debug: Log order after creation
   console.log('Order after creation:', order);
 
-  // Verify orderId was generated
   if (!order.orderId) {
     console.error('Order created but orderId is missing:', order);
     return next(new ApiError('Failed to generate orderId for the order', 500));
@@ -167,7 +155,6 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   });
   await Product.bulkWrite(bulkOption, {});
 
-  // Update ProductOrder counts for each product
   await Promise.all(
     cartItems.map(async (item) => {
       await productOrderService.updateOrderCount(item.product);
@@ -185,13 +172,12 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
     `)
     .join('');
 
-  // Customer email (only if email is provided)
   if (email) {
     const customerMessage = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; background-color: #f9f9f9;">
         <img src="https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/15ad48536f43ae127e96052f66c9998b~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=14579&refresh_token=429e3bbc&x-expires=1745686800&x-signature=e1V4wZQdr0DWdp51po7D6wXvMqM%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=my" alt="Dodo's Bakes Logo" style="max-width: 150px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
         <h2 style="color: #333; text-align: center;">Thank You for Your Order!</h2>
-        <p style="color: #555;">Hi ${name},</p>
+        <p style="color: #555;">Hi ${alias},</p>
         <p style="color: #555;">Thank you for shopping with Dodo's Bakes! Here are your order details:</p>
         <p style="color: #555;"><strong>Order ID:</strong> ${order.orderId}</p>
         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
@@ -208,13 +194,13 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
         </table>
         <p style="color: #555;"><strong>Subtotal:</strong> ${subtotal.toFixed(2)} LE</p>
         ${couponName
-        ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -${discountAmount.toFixed(2)} LE (${discountPercentage}%)</p>`
-        : ''
-      }
+          ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -${discountAmount.toFixed(2)} LE (${discountPercentage}%)</p>`
+          : ''
+        }
         <p style="color: #555;"><strong>Total Before Discount:</strong> ${totalBeforeDiscount.toFixed(2)} LE</p>
         <p style="color: #555;"><strong>Total After Discount:</strong> ${totalAfterDiscount.toFixed(2)} LE</p>
         <p style="color: #555;"><strong>Shipping Address:</strong><br>
-          ${details}, ${city}${apartment ? `, ${apartment}` : ''}${floor ? `, ${floor}` : ''}${street ? `, ${street}` : ''}<br>
+          ${alias}, ${details}, ${city}${postalCode ? `, ${postalCode}` : ''}<br>
           Phone: ${phone}</p>
         <p style="color: #555;">We will notify you once your order is shipped.</p>
         <p style="color: #777; text-align: center;">
@@ -231,7 +217,6 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
     });
   }
 
-  // Admin email
   const adminEmail = process.env.ADMIN_EMAIL;
   if (adminEmail) {
     const adminMessage = `
@@ -239,9 +224,10 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
         <img src="https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/15ad48536f43ae127e96052f66c9998b~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=14579&refresh_token=429e3bbc&x-expires=1745686800&x-signature=e1V4wZQdr0DWdp51po7D6wXvMqM%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=my" alt="Dodo's Bakes Logo" style="max-width: 150px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
         <h2 style="color: #333; text-align: center;">New Cash Order Notification</h2>
         <p style="color: #555;">Hello Admin,</p>
-        <p style="color: #555;">A new cash order has been placed on Dodo's Bakes.</p>
+        <s
+      <p style="color: #555;">A new cash order has been placed on Dodo's Bakes.</p>
         <p style="color: #555;"><strong>Order ID:</strong> ${order.orderId}</p>
-        <p style="color: #555;"><strong>Customer:</strong> ${req.user ? req.user.name : name}</p>
+        <p style="color: #555;"><strong>Customer:</strong> ${req.user ? req.user.name : alias}</p>
         <p style="color: #555;"><strong>Customer Email:</strong> ${email || 'N/A'}</p>
         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
           <thead>
@@ -257,13 +243,13 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
         </table>
         <p style="color: #555;"><strong>Subtotal:</strong> ${subtotal.toFixed(2)} LE</p>
         ${couponName
-        ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -${discountAmount.toFixed(2)} LE (${discountPercentage}%)</p>`
-        : ''
-      }
+          ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -${discountAmount.toFixed(2)} LE (${discountPercentage}%)</p>`
+          : ''
+        }
         <p style="color: #555;"><strong>Total Before Discount:</strong> ${totalBeforeDiscount.toFixed(2)} LE</p>
         <p style="color: #555;"><strong>Total After Discount:</strong> ${totalAfterDiscount.toFixed(2)} LE</p>
         <p style="color: #555;"><strong>Shipping Address:</strong><br>
-          ${details}, ${city}${apartment ? `, ${apartment}` : ''}${floor ? `, ${floor}` : ''}${street ? `, ${street}` : ''}<br>
+          ${alias}, ${details}, ${city}${postalCode ? `, ${postalCode}` : ''}<br>
           Phone: ${phone}</p>
         <p style="color: #555;">Please review the order in the admin panel.</p>
         <p style="color: #777; text-align: center;">Dodos Team</p>

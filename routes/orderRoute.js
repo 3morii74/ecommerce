@@ -1,4 +1,5 @@
 const express = require('express');
+
 const {
   createCashOrder,
   findAllOrders,
@@ -10,12 +11,12 @@ const {
   findDeletedOrders,
 } = require('../services/orderService');
 const authService = require('../services/authService');
+const extractUserIdFromToken = require('../middlewares/auth');
 
 const router = express.Router();
 
 // Allow authenticated and unauthenticated users (public route)
-router.route('/').post(createCashOrder);
-
+router.post('/', extractUserIdFromToken, createCashOrder);
 // Protected routes: Require authentication
 router.get(
   '/checkout-session/:cartId',
