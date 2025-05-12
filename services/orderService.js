@@ -10,6 +10,7 @@ const Cart = require('../models/cartModel');
 const Order = require('../models/orderModel');
 const sendEmail = require('../utils/sendEmail');
 
+
 // @desc    Create cash order
 // @route   POST /api/v1/orders
 // @access  Public
@@ -60,7 +61,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
         title: product.title,
         color: color || 'N/A',
         price: product.price,
-        quantity: parsedQuantity, // Store the validated quantity
+        quantity: parsedQuantity,
         total: product.price * parsedQuantity,
       };
     })
@@ -73,12 +74,12 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
       color: item.color,
       price: item.price,
       name: item.title,
-      quantity: item.quantity, // Include quantity in cartItems
+      quantity: item.quantity,
     });
     productDetails.push({
       title: item.title,
       price: item.price,
-      quantity: item.quantity, // Include quantity for email
+      quantity: item.quantity,
     });
     subtotal += item.total;
   });
@@ -94,6 +95,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   let couponId = null;
   let couponName = null;
   let discountAmount = 0;
+  let discountPercentage = 0; // Declare discountPercentage here
 
   if (coupon) {
     const couponDoc = await Coupon.findOne({ name: coupon });
@@ -112,8 +114,12 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
       return next(new ApiError(`Coupon ${coupon} has expired`, 400));
     }
 
-    // Apply fixed-amount discount
-    discountAmount = couponDoc.discount;
+    // Apply percentage-based discount
+    discountPercentage = couponDoc.discount; // e.g., 10 for 10%
+    if (discountPercentage < 0 || discountPercentage > 100) {
+      return next(new ApiError(`Invalid discount percentage: ${discountPercentage}`, 400));
+    }
+    discountAmount = (totalBeforeDiscount * discountPercentage) / 100;
     totalAfterDiscount = Math.max(0, totalBeforeDiscount - discountAmount);
 
     // Store coupon details
@@ -123,7 +129,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
 
   // 4) Create order
   const userId = req.user ? req.user._id : null; // Optional user ID for guests
-  const order = await Order.create({
+  const orderData = {
     user: userId,
     cartItems,
     shippingAddress: { details, city, phone, name, apartment, floor, street, email },
@@ -131,35 +137,42 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
     totalAfterDiscount,
     coupon: couponId,
     paymentMethodType: 'cash',
-  });
+  };
+
+  console.log('Order data before creation:', orderData);
+
+  const order = await Order.create(orderData);
 
   // Debug: Log order after creation
   console.log('Order after creation:', order);
 
-  // 5) Update product sold count
-  if (order) {
-    const bulkOption = cartItems.map((item) => {
-      // Double-check quantity before bulkWrite
-      const quantityToIncrement = Number(item.quantity);
-      if (Number.isNaN(quantityToIncrement) || quantityToIncrement <= 0) {
-        throw new ApiError(`Invalid quantity for product ${item.product}: ${item.quantity}`, 400);
-      }
-      return {
-        updateOne: {
-          filter: { _id: item.product },
-          update: { $inc: { sold: quantityToIncrement } },
-        },
-      };
-    });
-    await Product.bulkWrite(bulkOption, {});
-
-    // Update ProductOrder counts for each product
-    await Promise.all(
-      cartItems.map(async (item) => {
-        await productOrderService.updateOrderCount(item.product);
-      })
-    );
+  // Verify orderId was generated
+  if (!order.orderId) {
+    console.error('Order created but orderId is missing:', order);
+    return next(new ApiError('Failed to generate orderId for the order', 500));
   }
+
+  // 5) Update product sold count
+  const bulkOption = cartItems.map((item) => {
+    const quantityToIncrement = Number(item.quantity);
+    if (Number.isNaN(quantityToIncrement) || quantityToIncrement <= 0) {
+      throw new ApiError(`Invalid quantity for product ${item.product}: ${item.quantity}`, 400);
+    }
+    return {
+      updateOne: {
+        filter: { _id: item.product },
+        update: { $inc: { sold: quantityToIncrement } },
+      },
+    };
+  });
+  await Product.bulkWrite(bulkOption, {});
+
+  // Update ProductOrder counts for each product
+  await Promise.all(
+    cartItems.map(async (item) => {
+      await productOrderService.updateOrderCount(item.product);
+    })
+  );
 
   // 6) Send confirmation emails
   const orderItemsTableRows = productDetails
@@ -176,11 +189,11 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   if (email) {
     const customerMessage = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; background-color: #f9f9f9;">
-        <img src="https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/15ad48536f43ae127e96052f66c9998b~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=14579&refresh_token=429e3bbc&x-expires=1745686800&x-signature=e1V4wZQdr0DWdp51po7D6wXvMqM%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=my" alt="E-shop Logo" style="max-width: 150px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
+        <img src="https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/15ad48536f43ae127e96052f66c9998b~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=14579&refresh_token=429e3bbc&x-expires=1745686800&x-signature=e1V4wZQdr0DWdp51po7D6wXvMqM%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=my" alt="Dodo's Bakes Logo" style="max-width: 150px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
         <h2 style="color: #333; text-align: center;">Thank You for Your Order!</h2>
         <p style="color: #555;">Hi ${name},</p>
-        <p style="color: #555;">Thank you for shopping with E-shop! Here are your order details:</p>
-        <p style="color: #555;"><strong>Order ID:</strong> ${order._id}</p>
+        <p style="color: #555;">Thank you for shopping with Dodo's Bakes! Here are your order details:</p>
+        <p style="color: #555;"><strong>Order ID:</strong> ${order.orderId}</p>
         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
           <thead>
             <tr style="background-color: #f5f5f5;">
@@ -195,7 +208,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
         </table>
         <p style="color: #555;"><strong>Subtotal:</strong> ${subtotal.toFixed(2)} LE</p>
         ${couponName
-        ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -$${discountAmount.toFixed(2)}</p>`
+        ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -${discountAmount.toFixed(2)} LE (${discountPercentage}%)</p>`
         : ''
       }
         <p style="color: #555;"><strong>Total Before Discount:</strong> ${totalBeforeDiscount.toFixed(2)} LE</p>
@@ -212,7 +225,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
     `;
     await sendEmail({
       email,
-      subject: 'Your E-shop Order Confirmation',
+      subject: "Your Dodo's Bakes Order Confirmation",
       message: customerMessage.replace(/<[^>]+>/g, ''),
       html: customerMessage,
     });
@@ -223,11 +236,11 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
   if (adminEmail) {
     const adminMessage = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; background-color: #f9f9f9;">
-        <img src="https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/15ad48536f43ae127e96052f66c9998b~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=14579&refresh_token=429e3bbc&x-expires=1745686800&x-signature=e1V4wZQdr0DWdp51po7D6wXvMqM%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=my" alt="E-shop Logo" style="max-width: 150px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
+        <img src="https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/15ad48536f43ae127e96052f66c9998b~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=14579&refresh_token=429e3bbc&x-expires=1745686800&x-signature=e1V4wZQdr0DWdp51po7D6wXvMqM%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=81f88b70&idc=my" alt="Dodo's Bakes Logo" style="max-width: 150px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
         <h2 style="color: #333; text-align: center;">New Cash Order Notification</h2>
         <p style="color: #555;">Hello Admin,</p>
-        <p style="color: #555;">A new cash order has been placed on E-shop.</p>
-        <p style="color: #555;"><strong>Order ID:</strong> ${order._id}</p>
+        <p style="color: #555;">A new cash order has been placed on Dodo's Bakes.</p>
+        <p style="color: #555;"><strong>Order ID:</strong> ${order.orderId}</p>
         <p style="color: #555;"><strong>Customer:</strong> ${req.user ? req.user.name : name}</p>
         <p style="color: #555;"><strong>Customer Email:</strong> ${email || 'N/A'}</p>
         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
@@ -244,7 +257,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
         </table>
         <p style="color: #555;"><strong>Subtotal:</strong> ${subtotal.toFixed(2)} LE</p>
         ${couponName
-        ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -$${discountAmount.toFixed(2)}</p>`
+        ? `<p style="color: #555;"><strong>Coupon Applied (${couponName}):</strong> -${discountAmount.toFixed(2)} LE (${discountPercentage}%)</p>`
         : ''
       }
         <p style="color: #555;"><strong>Total Before Discount:</strong> ${totalBeforeDiscount.toFixed(2)} LE</p>
@@ -258,7 +271,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
     `;
     await sendEmail({
       email: adminEmail,
-      subject: `New Cash Order Placed - Order ID: ${order._id}`,
+      subject: `New Cash Order Placed - Order ID: ${order.orderId}`,
       message: adminMessage.replace(/<[^>]+>/g, ''),
       html: adminMessage,
     });
@@ -271,7 +284,7 @@ exports.createCashOrder = asyncHandler(async (req, res, next) => {
       order,
       totalBeforeDiscount: totalBeforeDiscount.toFixed(2),
       totalAfterDiscount: totalAfterDiscount.toFixed(2),
-      coupon: couponName ? { name: couponName, discount: discountAmount } : null,
+      coupon: couponName ? { name: couponName, discount: discountAmount, percentage: discountPercentage } : null,
     },
   });
 });

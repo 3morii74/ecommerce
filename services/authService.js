@@ -141,7 +141,7 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
   await user.save();
 
   // 3) Send the reset code via email
-  const message = `Hi ${user.name},<br>We received a request to reset the password on your E-shop Account.<br><strong>${resetCode}</strong><br>Enter this code to complete the reset.<br>Thanks for helping us keep your account secure.<br><br>The E-shop Team<br><a href="https://omarahmedd.com">Visit our website</a>`; try {
+  const message = `Hi ${user.name},<br>We received a request to reset the password on your Dodo's Bakes Account.<br><strong>${resetCode}</strong><br>Enter this code to complete the reset.<br>Thanks for helping us keep your account secure.<br><br>The Dodo's Bakes Team<br><a href="https://omarahmedd.com">Visit our website</a>`; try {
     await sendEmail({
       email: user.email,
       subject: 'Your password reset code (valid for 10 min)',

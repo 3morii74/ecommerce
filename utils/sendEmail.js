@@ -22,7 +22,7 @@ const sendEmail = async (options) => {
   });
 
   const mailOpts = {
-    from: `E-shop App <${process.env.BREVO_SENDER_EMAIL}>`, // Use the verified sender email
+    from: `Dodo's Bakes <${process.env.BREVO_SENDER_EMAIL}>`, // Use the verified sender email
     to: options.email,
     subject: options.subject,
     text: options.message,

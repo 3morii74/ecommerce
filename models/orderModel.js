@@ -1,7 +1,23 @@
 const mongoose = require('mongoose');
 
+// Custom function to generate a 6-character alphanumeric ID
+const generateOrderId = () => {
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  let id = '';
+  for (let i = 0; i < 6; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return id;
+};
+
 const orderSchema = new mongoose.Schema(
   {
+    orderId: {
+      type: String,
+      unique: true, // Ensure orderId is unique
+      required: [true, 'Order ID is required'],
+      index: true, // Add index for faster uniqueness checks
+    },
     user: {
       type: mongoose.Schema.ObjectId,
       ref: 'User',
@@ -15,6 +31,7 @@ const orderSchema = new mongoose.Schema(
         },
         quantity: Number,
         price: Number,
+        name: String, // Added name field to match service
       },
     ],
     shippingAddress: {
@@ -62,16 +79,55 @@ const orderSchema = new mongoose.Schema(
     },
     deletedAt: Date, // Optional: Track when the order was soft-deleted
   },
-  { timestamps: true }
+  { timestamps: true, id: false } // Disable default _id
 );
+
+// Pre-validate hook to generate a unique orderId
+orderSchema.pre('validate', async function (next) {
+  console.log('Pre-validate hook: Checking orderId...');
+  if (this.isNew && !this.orderId) {
+    console.log('Generating new orderId...');
+    let isUnique = false;
+    let id;
+    let retries = 0;
+    const maxRetries = 5;
+
+    try {
+      while (!isUnique && retries < maxRetries) {
+        id = generateOrderId(); // Generate a 6-character ID
+        console.log(`Attempt ${retries + 1}: Generated orderId: ${id}`);
+        const existingOrder = await mongoose.models.Order.findOne({ orderId: id });
+        if (!existingOrder) {
+          isUnique = true;
+          console.log(`Unique orderId found: ${id}`);
+        } else {
+          console.log(`Collision detected for orderId: ${id}`);
+        }
+        retries++;
+      }
+
+      if (!isUnique) {
+        console.error('Failed to generate unique orderId after maximum retries');
+        return next(new Error('Failed to generate a unique orderId after maximum retries'));
+      }
+
+      this.orderId = id; // Assign the unique ID
+      console.log(`Assigned orderId: ${this.orderId}`);
+    } catch (error) {
+      console.error('Error in pre-validate hook:', error);
+      return next(error);
+    }
+  } else {
+    console.log('orderId already exists or not a new document:', this.orderId);
+  }
+  next();
+});
 
 // Pre-hook to exclude soft-deleted orders by default
 orderSchema.pre(/^find/, function (next) {
-  // Debug: Log the query and options
   console.log('Pre-find hook - Query:', this.getQuery());
   console.log('Pre-find hook - IncludeDeleted:', this.getQuery().includeDeleted);
 
-  // Only apply the filter if 'includeDeleted' is not explicitly set to true
   if (!this.getQuery().includeDeleted) {
     console.log('Applying default filter: excluding deleted orders');
     this.where({ deleted: { $ne: true } });
