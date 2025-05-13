@@ -1,6 +1,5 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
 const asyncHandler = require('express-async-handler');
-const factory = require('./handlersFactory');
 const ApiError = require('../utils/apiError');
 const productOrderService = require('./productOrderService');
 const Coupon = require('../models/couponModel');
@@ -336,10 +335,47 @@ exports.getOrder = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Get all orders
+// @desc    Get all orders (all for admin, user's own for regular users)
 // @route   GET /api/v1/orders
 // @access  Protected/User-Admin-Manager
-exports.findAllOrders = factory.getAll(Order);
+exports.findAllOrders = asyncHandler(async (req, res, next) => {
+  let query = {};
+
+  // Check user's role from the token (populated by authService.protect)
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
+    // Admins and managers can see all orders
+    query = {};
+  } else {
+    // Regular users can only see their own orders
+    query = { user: req.user._id };
+  }
+
+  // Fetch orders with populated fields
+  const orders = await Order.find(query)
+    .populate({
+      path: 'user',
+      select: 'name email phone',
+      match: { _id: { $ne: null } },
+    })
+    .populate({
+      path: 'cartItems.product',
+      select: 'title imageCover',
+    })
+    .populate({
+      path: 'coupon',
+      select: 'code discount',
+    });
+
+  if (!orders || orders.length === 0) {
+    return next(new ApiError('No orders found', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    results: orders.length,
+    data: orders,
+  });
+});
 
 // @desc    Get specific order
 // @route   GET /api/v1/orders/:id
