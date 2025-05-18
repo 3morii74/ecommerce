@@ -1,5 +1,24 @@
 const Product = require('../models/productModel');
 
+// Helper function to set image URLs, avoiding duplication for existing URLs
+const setImageURL = (doc) => {
+  console.log('setImageURL called for doc:', doc._id, 'imageCover:', doc.imageCover);
+  const isUrl = (str) => /^https?:\/\//i.test(str);
+
+  if (doc.imageCover && !isUrl(doc.imageCover)) {
+    const imageUrl = `${process.env.BASE_URL}/products/${doc.imageCover}`;
+    doc.imageCover = imageUrl;
+  }
+  if (doc.images) {
+    const imagesList = [];
+    doc.images.forEach((image) => {
+      const imageUrl = isUrl(image) ? image : `${process.env.BASE_URL}/products/${image}`;
+      imagesList.push(imageUrl);
+    });
+    doc.images = imagesList;
+  }
+};
+
 exports.searchProducts = async (searchTerm) => {
     if (!searchTerm) {
         throw new Error('Search term is required');
@@ -31,7 +50,7 @@ exports.searchProducts = async (searchTerm) => {
                 ],
             },
         },
-        // Optionally, project to reshape the output (similar to populate)
+        // Project to reshape the output (similar to populate)
         {
             $project: {
                 title: 1,
@@ -56,14 +75,9 @@ exports.searchProducts = async (searchTerm) => {
         },
     ]);
 
-    // Manually apply the setImageURL logic since aggregation doesn't trigger middleware
+    // Apply setImageURL logic to handle image URLs correctly
     products.forEach((doc) => {
-        if (doc.imageCover) {
-            doc.imageCover = `${process.env.BASE_URL}/products/${doc.imageCover}`;
-        }
-        if (doc.images) {
-            doc.images = doc.images.map((image) => `${process.env.BASE_URL}/products/${image}`);
-        }
+        setImageURL(doc);
     });
 
     return products;

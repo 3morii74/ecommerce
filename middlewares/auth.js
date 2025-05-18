@@ -8,11 +8,15 @@ const jwt = require('jsonwebtoken');
  * @param {Function} next - Express next middleware function
  */
 const extractUserIdFromToken = (req, res, next) => {
-    // Extract token from Authorization header (format: "Bearer <token>")
-    const token = req.headers.authorization.startsWith('Bearer')
-        ? req.headers.authorization.split(' ')[1]
+    // Extract Authorization header
+    const authHeader = req.headers.authorization;
+
+    // Extract token if header exists and starts with 'Bearer '
+    const token = authHeader && authHeader.startsWith('Bearer ')
+        ? authHeader.split(' ')[1]
         : null;
-    console.log(token);
+    console.log('Token:', token);
+
     if (token) {
         try {
             // Check if JWT_SECRET is defined
@@ -32,7 +36,8 @@ const extractUserIdFromToken = (req, res, next) => {
             console.error('Invalid or expired token:', error.message);
         }
     } else {
-        console.log('No token provided in request');
+        console.log('No valid token provided in request');
+        req.user = null; // Explicitly set req.user to null for unauthenticated users
     }
 
     // Proceed to the next middleware/route handler
